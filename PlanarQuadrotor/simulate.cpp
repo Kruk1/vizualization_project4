@@ -4,11 +4,14 @@
 #include "simulate.h"
 #include <matplot/matplot.h>
 
-void visualization(std::vector<float> x_data, std::vector<float> y_data){
-    matplot::plot(x_data, y_data);
-    matplot::xlabel("X-axis");
-    matplot::ylabel("Y-axis");
-    matplot::title("Trajectory Plot");
+void visualization(std::vector<float> x_data, std::vector<float> y_data, std::vector<float> theta_data){
+    matplot::plot(x_data);
+    matplot::show();
+
+    matplot::plot(y_data);
+    matplot::show();
+
+    matplot::plot(theta_data);
     matplot::show();
 }
 
@@ -24,9 +27,9 @@ Eigen::MatrixXf LQR(PlanarQuadrotor &quadrotor, float dt) {
     Eigen::MatrixXf K = Eigen::MatrixXf::Zero(6, 6);
     Eigen::Vector2f input = quadrotor.GravityCompInput();
 
-    Q.diagonal() << 1, 10, 10, 1, 10, 0.25 / 2 / M_PI;
-    R.row(0) << 0.1, 0.05;
-    R.row(1) << 0.05, 0.1;
+    Q.diagonal() << 0.1, 0.1, 300, 0.05, 0.045, 2 / 2 / M_PI;
+    R.row(0) << 25, 5;
+    R.row(1) << 5, 25;
 
     std::tie(A, B) = quadrotor.Linearize();
     A_discrete = Eye + dt * A;
@@ -38,6 +41,17 @@ Eigen::MatrixXf LQR(PlanarQuadrotor &quadrotor, float dt) {
 void control(PlanarQuadrotor &quadrotor, const Eigen::MatrixXf &K) {
     Eigen::Vector2f input = quadrotor.GravityCompInput();
     quadrotor.SetInput(input - K * quadrotor.GetControlState());
+}
+
+float interpolate(float prev_angle, float current_angle, float interpolation_factor) {
+    float difference = current_angle - prev_angle;
+    if (difference > M_PI) {
+        difference -= 2 * M_PI;
+    }
+    else if (difference < -M_PI) {
+        difference += 2 * M_PI;
+    }
+    return prev_angle + difference * interpolation_factor;
 }
 
 int main(int argc, char* args[])
@@ -63,7 +77,6 @@ int main(int argc, char* args[])
      * For implemented LQR controller, it has to be [x, y, 0, 0, 0, 0]
     */
     Eigen::VectorXf goal_state = Eigen::VectorXf::Zero(6);
-    goal_state << 0, 0, 0, 0, 0, 0;
     quadrotor.SetGoal(goal_state);
     /* Timestep for the simulation */
     const float dt = 0.001;
@@ -83,10 +96,11 @@ int main(int argc, char* args[])
         SDL_Event e;
         bool quit = false;
         float delay;
-        int x, y;
-        Eigen::VectorXf state = Eigen::VectorXf::Zero(6);
+        int x = 0, y = 0;
         Eigen::VectorXf theta_his = Eigen::VectorXf::Zero(6);
         char key;
+        float prev_theta = 0;
+        float factor = 0.001;
 
         x_history.push_back(0);
         y_history.push_back(0);
@@ -94,6 +108,7 @@ int main(int argc, char* args[])
 
         while (!quit)
         {
+            Eigen::VectorXf state = quadrotor.GetState();
             //events
             while (SDL_PollEvent(&e) != 0)
             {
@@ -105,19 +120,16 @@ int main(int argc, char* args[])
                 {
                     if(e.key.keysym.sym == SDLK_p)
                     {
-                        visualization(x_history, y_history);
+                        visualization(x_history, y_history, theta_history);
                     }
                 }
-                else if (e.type == SDL_MOUSEMOTION)
-                {
-                    theta_his = quadrotor.GetState();
-
-                    if (SDL_GetMouseState(&x, &y) == SDL_BUTTON(1)){
-                        x_history.push_back(x - SCREEN_WIDTH/2);
-                        y_history.push_back(-(y - SCREEN_HEIGHT/2));
-                        theta_history.push_back(theta_his[2]);
-                        goal_state << x - SCREEN_WIDTH/2,-(y - SCREEN_HEIGHT/2),0,0,0,0;
-                        quadrotor.SetGoal(goal_state);
+                else if (e.type == SDL_MOUSEBUTTONDOWN) {
+                    if(e.button.button == SDL_BUTTON_LEFT)
+                    {
+                        SDL_GetMouseState(&x, &y);
+                        Eigen::VectorXf new_goal_state = Eigen::VectorXf::Zero(6);
+                        new_goal_state << x - SCREEN_WIDTH / 2, -(y - SCREEN_HEIGHT / 2), 0, 0, 0, 0;
+                        quadrotor.SetGoal(new_goal_state);
                     }
                 }
             }
@@ -135,6 +147,13 @@ int main(int argc, char* args[])
             /* Simulate quadrotor forward in time */
             control(quadrotor, K);
             quadrotor.Update(dt);
+
+            float inter_theta = interpolate(prev_theta, quadrotor.GetState()[2], factor);
+            prev_theta = inter_theta;
+
+            x_history.push_back(state[0]);
+            y_history.push_back(state[1]);
+            theta_history.push_back(inter_theta);
         }
     }
     SDL_Quit();
