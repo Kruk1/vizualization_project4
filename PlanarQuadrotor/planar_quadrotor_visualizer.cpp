@@ -4,18 +4,22 @@ PlanarQuadrotorVisualizer::PlanarQuadrotorVisualizer(PlanarQuadrotor *quadrotor_
 
 /**
  * TODO: Improve visualizetion
- * 1. Transform coordinates from quadrotor frame to image frame so the circle is in the middle of the screen
- * 2. Use more shapes to represent quadrotor (e.x. try replicate http://underactuated.mit.edu/acrobot.html#section3 or do something prettier)
+ * 1. Transform coordinates from quadrotor frame to image frame so the circle is in the middle of the screen x
+ * 2. Use more shapes to represent quadrotor (e.x. try replicate http://underactuated.mit.edu/acrobot.html#section3 or do something prettier) X
  * 3. Animate proppelers
  */
 void PlanarQuadrotorVisualizer::render(std::shared_ptr<SDL_Renderer> &gRenderer) {
     Eigen::VectorXf state = quadrotor_ptr->GetState();
     float q_x, q_y, q_theta;
+    const int SCREEN_WIDTH = 1280;
+    const int SCREEN_HEIGHT = 720;
 
     /* x, y, theta coordinates */
-    q_x = state[0];
-    q_y = state[1];
+    q_x = state[0] + SCREEN_WIDTH/2;
+    q_y = -(state[1] - SCREEN_HEIGHT/2);
     q_theta = state[2];
+
+    std::cout << "x: " << q_x << " y: " << q_y << " theta: "<< q_theta << std::endl;
 
     float x_1,y_1,x_2,y_2;
     float l = 36;
@@ -24,7 +28,7 @@ void PlanarQuadrotorVisualizer::render(std::shared_ptr<SDL_Renderer> &gRenderer)
     x_2 = cos(q_theta)*l + q_x;
     y_2 = q_y + sin(q_theta)*l;
 
-    for(int i = 0; i <5;i++){
+    for(int i = 0; i < 5;i++){
         lineColor(gRenderer.get(), x_1,y_1+i,x_2,y_2+i,0xFF414141);
     }
 

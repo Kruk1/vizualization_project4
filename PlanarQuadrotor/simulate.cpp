@@ -2,6 +2,15 @@
  * SDL window creation adapted from https://github.com/isJuhn/DoublePendulum
 */
 #include "simulate.h"
+#include <matplot/matplot.h>
+
+void visualization(std::vector<float> x_data, std::vector<float> y_data){
+    matplot::plot(x_data, y_data);
+    matplot::xlabel("X-axis");
+    matplot::ylabel("Y-axis");
+    matplot::title("Trajectory Plot");
+    matplot::show();
+}
 
 Eigen::MatrixXf LQR(PlanarQuadrotor &quadrotor, float dt) {
     /* Calculate LQR gain matrix */
@@ -15,7 +24,7 @@ Eigen::MatrixXf LQR(PlanarQuadrotor &quadrotor, float dt) {
     Eigen::MatrixXf K = Eigen::MatrixXf::Zero(6, 6);
     Eigen::Vector2f input = quadrotor.GravityCompInput();
 
-    Q.diagonal() << 10, 10, 10, 1, 10, 0.25 / 2 / M_PI;
+    Q.diagonal() << 1, 10, 10, 1, 10, 0.25 / 2 / M_PI;
     R.row(0) << 0.1, 0.05;
     R.row(1) << 0.05, 0.1;
 
@@ -45,7 +54,7 @@ int main(int argc, char* args[])
      * 2. Update PlanarQuadrotor from simulation when goal is changed
     */
     Eigen::VectorXf initial_state = Eigen::VectorXf::Zero(6);
-    initial_state << SCREEN_WIDTH/2,SCREEN_HEIGHT/2,0,0,0,0;
+    initial_state << 0,0,0,0,0,0;
     PlanarQuadrotor quadrotor(initial_state);
     PlanarQuadrotorVisualizer quadrotor_visualizer(&quadrotor);
     /**
@@ -54,17 +63,16 @@ int main(int argc, char* args[])
      * For implemented LQR controller, it has to be [x, y, 0, 0, 0, 0]
     */
     Eigen::VectorXf goal_state = Eigen::VectorXf::Zero(6);
-    goal_state << SCREEN_WIDTH/2,SCREEN_HEIGHT/2,1,0,0,0;
+    goal_state << 0, 0, 0, 0, 0, 0;
     quadrotor.SetGoal(goal_state);
     /* Timestep for the simulation */
     const float dt = 0.001;
     Eigen::MatrixXf K = LQR(quadrotor, dt);
     Eigen::Vector2f input = Eigen::Vector2f::Zero(2);
-
     /**
      * TODO: Plot x, y, theta over time
-     * 1. Update x, y, theta history vectors to store trajectory of the quadrotor
-     * 2. Plot trajectory using matplot++ when key 'p' is clicked
+     * 1. Update x, y, theta history vectors to store trajectory of the quadrotor X
+     * 2. Plot trajectory using matplot++ when key 'p' is clicked X
     */
     std::vector<float> x_history;
     std::vector<float> y_history;
@@ -77,7 +85,12 @@ int main(int argc, char* args[])
         float delay;
         int x, y;
         Eigen::VectorXf state = Eigen::VectorXf::Zero(6);
+        Eigen::VectorXf theta_his = Eigen::VectorXf::Zero(6);
         char key;
+
+        x_history.push_back(0);
+        y_history.push_back(0);
+        theta_history.push_back(0);
 
         while (!quit)
         {
@@ -88,12 +101,22 @@ int main(int argc, char* args[])
                 {
                     quit = true;
                 }
+                else if (e.type == SDL_KEYDOWN)
+                {
+                    if(e.key.keysym.sym == SDLK_p)
+                    {
+                        visualization(x_history, y_history);
+                    }
+                }
                 else if (e.type == SDL_MOUSEMOTION)
                 {
-                    SDL_GetMouseState(&x, &y);
-                    std::cout << "Mouse position: (" << x << ", " << y << ")" << std::endl;
+                    theta_his = quadrotor.GetState();
+
                     if (SDL_GetMouseState(&x, &y) == SDL_BUTTON(1)){
-                         goal_state << x,y,0,0,0,0;
+                        x_history.push_back(x - SCREEN_WIDTH/2);
+                        y_history.push_back(-(y - SCREEN_HEIGHT/2));
+                        theta_history.push_back(theta_his[2]);
+                        goal_state << x - SCREEN_WIDTH/2,-(y - SCREEN_HEIGHT/2),0,0,0,0;
                         quadrotor.SetGoal(goal_state);
                     }
                 }
